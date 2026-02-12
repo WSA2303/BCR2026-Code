@@ -6,6 +6,7 @@ from pathlib import Path
 
 from csv_plotter.io_csv import list_csv_files, load_xy_from_csv
 from csv_plotter.plotting import plot_xy
+from csv_plotter.triple_overlay import plot_triplets_with_computed_theory
 
 
 def project_root() -> Path:
@@ -68,8 +69,8 @@ def maybe_convert_units_to_cm(df, xcol: str, ycol: str, zmax_m: float):
 
     xlabel = xcol
     ylabel = ycol
-    xfmt = "%.4f"
-    yfmt = "%.4f"
+    xfmt = "%.2f"
+    yfmt = "%.2f"
     ylim = None
 
     # --- z em cm ---
@@ -149,7 +150,18 @@ def main() -> None:
             xfmt=xfmt,
             yfmt=yfmt,
         )
-
         print(f"[OK] {out_path}")
+    
+    # 2) Triplet: ref + 1000 + theory_velocity (global)
+    generated = plot_triplets_with_computed_theory(
+    csv_files=csv_files,
+    output_dir=output_dir,
+    xcol=args.xcol,
+    ycol=args.ycol,
+    dpi=args.dpi,
+    )
+
+    for p in generated:
+        print(f"[OK][TRIPLE] {p}")
 
     print(f"\nPronto! Imagens em: {output_dir}")
