@@ -49,6 +49,58 @@ def next_available_path(out_path: Path) -> Path:
             return candidate
         i += 1
 
+def label_from_filename(stem: str) -> str | None:
+    name = stem.lower()
+    if "ref" in name:
+        return r"$\eta_0 = f(N_z)$"
+    if "1000" in name:
+        return r"$\eta_0 = f(K_n)$"
+    return None
+
+
+def maybe_convert_units_to_cm(df, xcol: str, ycol: str, zmax_m: float):
+    """
+    Se detectar que z está em metros (valores pequenos), converte z -> cm.
+    Se detectar que U_0 está em m/s (valores típicos), converte U_0 -> cm/s.
+    Retorna: (df_convertido, ylim, xlabel, ylabel, xfmt, yfmt)
+    """
+    df2 = df.copy()
+
+    xlabel = xcol
+    ylabel = ycol
+    xfmt = "%.4f"
+    yfmt = "%.4f"
+    ylim = None
+
+    # --- z em cm ---
+    if ycol == "z":
+        zmax_val = float(df2[ycol].max())
+        # heurística: se z_max <= 0.5, quase certeza que está em metros
+        if zmax_val <= 0.5:
+            df2[ycol] = df2[ycol] * 100.0
+            ylabel = r"$z\ [cm]$"
+            yfmt = "%.2f"
+            ylim = (0.0, zmax_m * 100.0)  # zmax veio em metros
+        else:
+            # já parece estar em cm
+            ylabel = r"$z\ [cm]$"
+            yfmt = "%.2f"
+            ylim = (0.0, zmax_m)  # assume que usuário passou em cm (raro)
+
+    # --- U_0 em cm/s ---
+    if xcol == "U_0":
+        umax = float(df2[xcol].abs().max())
+        # heurística: velocidades típicas em m/s costumam ser < 5
+        if umax <= 5.0:
+            df2[xcol] = df2[xcol] * 100.0
+            xlabel = r"$u\ [cm/s]$"
+            xfmt = "%.4f"
+        else:
+            xlabel = r"$u\ [cm/s]$"
+            xfmt = "%.4f"
+
+    return df2, ylim, xlabel, ylabel, xfmt, yfmt
+
 def main() -> None:
     args = build_parser().parse_args()
 
@@ -66,6 +118,13 @@ def main() -> None:
     # 1) PNGs dos CSVs
     for csv_path in csv_files:
         df = load_xy_from_csv(csv_path, args.xcol, args.ycol)
+        # legenda baseada no nome do arquivo
+        label = label_from_filename(csv_path.stem)
+
+        # converte unidades (se precisar) e define ylim/labels/formatos
+        df_plot, ylim_plot, xlabel, ylabel, xfmt, yfmt = maybe_convert_units_to_cm(
+            df, args.xcol, args.ycol, args.zmax
+        )
 
         if args.swap:
             out_name = f"{csv_path.stem}_{args.ycol}_vs_{args.xcol}.png"
@@ -75,17 +134,19 @@ def main() -> None:
         out_path = next_available_path(output_dir / out_name)
 
         plot_xy(
-            df=df,
+            df=df_plot,
             xcol=args.xcol,
             ycol=args.ycol,
             out_path=out_path,
-            title=csv_path.stem,
+            title=None,            # <- igual ao estilo “limpo”
+            label=label,           # <- aqui entra sua legenda automática
             swap=args.swap,
             dpi=args.dpi,
-            ylim=ylim,  
-            xlabel=r"$u\ [cm/s]$",       # se você estiver em cm/s
-            ylabel=r"$z\ [cm]$",         # se você estiver em cm
-            yfmt="%.3f",                 # opcional: combina com z em cm
+            ylim=ylim_plot,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            xfmt=xfmt,
+            yfmt=yfmt,
         )
 
         print(f"[OK] {out_path}")
