@@ -118,6 +118,7 @@ def main() -> None:
     # 1) PNGs dos CSVs
     for csv_path in csv_files:
         df = load_xy_from_csv(csv_path, args.xcol, args.ycol)
+        
         # legenda baseada no nome do arquivo
         label = label_from_filename(csv_path.stem)
 
