@@ -1,12 +1,11 @@
+# src/csv_plotter/triple_overlay.py
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FormatStrFormatter, MultipleLocator
 
 from csv_plotter.io_csv import load_xy_from_csv
 from csv_plotter.plotting import apply_plot_style, style_axes
@@ -52,13 +51,12 @@ def _tag_from_stem(stem: str) -> str | None:
 
 def _base_from_stem(stem: str) -> str:
     """
-    Deixa robusto com variações tipo:
-    09_100_ref; 09_100_ref_algumaCoisa 09_100_1000up etc.
+    Robusto com variações tipo:
+    09_100_ref; 09_100_ref_algo 09_100_1000up etc.
     """
     s = stem.split(";")[0]  # remove tudo após ';' se existir
     low = s.lower()
 
-    # pega o que vem antes de _ref ou _1000
     if "_ref" in low:
         base = s[: low.index("_ref")]
     elif "_1000" in low:
@@ -87,28 +85,44 @@ def compute_theory_df(xcol: str = "U_0", ycol: str = "z") -> tuple[pd.DataFrame,
 
     z_m = np.linspace(0.0, h, len(vel))
     df = pd.DataFrame({xcol: np.array(vel, dtype=float), ycol: z_m})
-
     return df, float(z0)
 
 
-def estimate_z0_from_profile(df: pd.DataFrame, xcol: str, ycol: str, tol: float = 0.005) -> float:
+def load_manual_z0(path: Path) -> dict[str, dict[str, float]]:
     """
-    Estima z0 como o primeiro z onde o perfil entra no "platô"
-    (u >= (1-tol) u_max) e permanece assim para z acima.
-    Retorna em unidades de ycol.
+    Lê data/z0_manual.csv (delimitado por vírgulas) e retorna:
+      {
+        "09_100": {"nz": 0.9763, "kn": 1.2457},
+        "03_25":  {"kn": 3.0301},
+        ...
+      }
+    Valores em cm.
     """
-    d = df[[xcol, ycol]].dropna().sort_values(ycol).reset_index(drop=True)
-    u = d[xcol].to_numpy()
-    z = d[ycol].to_numpy()
+    if not path.exists():
+        return {}
 
-    u_max = float(np.max(u))
-    thr = (1.0 - tol) * u_max
+    df = pd.read_csv(path)  # seu arquivo está com vírgulas
+    out: dict[str, dict[str, float]] = {}
 
-    suffix_min = np.minimum.accumulate(u[::-1])[::-1]
-    idx = np.where(suffix_min >= thr)[0]
-    if len(idx) == 0:
-        return float(z[np.argmax(u)])
-    return float(z[idx[0]])
+    for _, row in df.iterrows():
+        base = str(row.get("base", "")).strip()
+        if not base:
+            continue
+
+        d: dict[str, float] = {}
+
+        z_ref = row.get("z0_ref_cm", None)
+        if pd.notna(z_ref):
+            d["nz"] = float(z_ref)
+
+        z_1000 = row.get("z0_1000_cm", None)
+        if pd.notna(z_1000):
+            d["kn"] = float(z_1000)
+
+        if d:
+            out[base] = d
+
+    return out
 
 
 def plot_triplets_with_computed_theory(
@@ -124,12 +138,13 @@ def plot_triplets_with_computed_theory(
       - se tiver 1000: plota (Analítico + 1000)
       - se tiver ambos: plota (Analítico + ref + 1000)
 
-    Salva outputs/<base>_triple.png (sem sobrescrever).
+    Sempre usa o analítico fixo (THEORY_PARAMS).
+    z0_ref e z0_1000 vêm de data/z0_manual.csv (manual).
     """
     apply_plot_style()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # agrupa ref/1000 por base
+    # 1) agrupa ref/1000 por base
     groups: dict[str, dict[str, Path]] = {}
     for p in csv_files:
         tag = _tag_from_stem(p.stem)
@@ -138,11 +153,14 @@ def plot_triplets_with_computed_theory(
         base = _base_from_stem(p.stem)
         groups.setdefault(base, {})[tag] = p
 
-    # se não tem nenhum ref/1000, não há nada a fazer
     if not groups:
         return []
 
-    # analítico é sempre igual -> calcula 1 vez
+    # 2) carrega z0 manuais (em cm)
+    manual_path = output_dir.parent / "data" / "z0_manual.csv"
+    manual_z0 = load_manual_z0(manual_path)
+
+    # 3) analítico é sempre igual -> calcula 1 vez
     df_ana_m, z0_ana_m = compute_theory_df(xcol=xcol, ycol=ycol)
 
     generated: list[Path] = []
@@ -150,15 +168,14 @@ def plot_triplets_with_computed_theory(
     for base, items in groups.items():
         has_nz = "nz" in items
         has_kn = "kn" in items
-
         if not (has_nz or has_kn):
-            continue  # redundante, mas ok
+            continue
 
         df_ana = df_ana_m.copy()
         df_nz = load_xy_from_csv(items["nz"], xcol, ycol) if has_nz else None
         df_kn = load_xy_from_csv(items["kn"], xcol, ycol) if has_kn else None
 
-        # decide unidade olhando z (mais confiável)
+        # 4) decide unidade olhando z (mais confiável)
         zmax_candidates = [float(df_ana[ycol].max())]
         if df_nz is not None:
             zmax_candidates.append(float(df_nz[ycol].max()))
@@ -166,9 +183,10 @@ def plot_triplets_with_computed_theory(
             zmax_candidates.append(float(df_kn[ycol].max()))
         zmax_all = max(zmax_candidates)
 
-        in_meters = zmax_all <= 0.5  # se z pequeno, assume metros -> converte p/ cm
+        in_meters = zmax_all <= 0.5  # z pequeno => metros
 
         if in_meters:
+            # converte tudo pra cm e cm/s
             df_ana[xcol] *= 100.0
             df_ana[ycol] *= 100.0
             if df_nz is not None:
@@ -178,21 +196,37 @@ def plot_triplets_with_computed_theory(
                 df_kn[xcol] *= 100.0
                 df_kn[ycol] *= 100.0
 
-            z0_ana = z0_ana_m * 100.0
+            z0_ana = z0_ana_m * 100.0  # cm
             xlabel = r"$u\ [cm/s]$"
             ylabel = r"$z\ [cm]$"
             unit = "cm"
+
+            # z0 manuais já estão em cm
+            z0_nz = manual_z0.get(base, {}).get("nz", None)
+            z0_kn = manual_z0.get(base, {}).get("kn", None)
+
         else:
-            z0_ana = z0_ana_m
+            # está em metros (raro no seu caso)
+            z0_ana = z0_ana_m  # m
             xlabel = xcol
             ylabel = ycol
             unit = ""
 
-        # z0 dos dados (se existirem)
-        z0_nz = estimate_z0_from_profile(df_nz, xcol, ycol) if df_nz is not None else None
-        z0_kn = estimate_z0_from_profile(df_kn, xcol, ycol) if df_kn is not None else None
+            # manuais em cm -> converte para m
+            z0_nz = manual_z0.get(base, {}).get("nz", None)
+            z0_kn = manual_z0.get(base, {}).get("kn", None)
+            if z0_nz is not None:
+                z0_nz = z0_nz / 100.0
+            if z0_kn is not None:
+                z0_kn = z0_kn / 100.0
 
-        # limites
+        # WARNs (opcional)
+        if df_nz is not None and z0_nz is None:
+            print(f"[WARN] Sem z0_ref_cm para base={base} em data/z0_manual.csv")
+        if df_kn is not None and z0_kn is None:
+            print(f"[WARN] Sem z0_1000_cm para base={base} em data/z0_manual.csv")
+
+        # 5) limites
         umax_candidates = [float(df_ana[xcol].max())]
         zmax_candidates = [float(df_ana[ycol].max())]
         if df_nz is not None:
@@ -236,40 +270,37 @@ def plot_triplets_with_computed_theory(
                 label=r"$\eta_0=f(K_n)$",
             )
 
-        # linhas z0 (só as que existem)
+        # linhas z0
         ax.axhline(z0_ana, color="red", linestyle="--", linewidth=2.0)
-
         if z0_kn is not None:
             ax.axhline(z0_kn, color="green", linestyle="--", linewidth=2.0)
         if z0_nz is not None:
             ax.axhline(z0_nz, color="purple", linestyle="--", linewidth=2.0)
 
-        # textos (só os que existem)
+        # textos
         x_left = 0.05 * umax
-        x_mid  = 0.33 * umax
+        x_mid = 0.33 * umax
         dy = 0.02 * zmax
 
         if z0_kn is not None:
             ax.text(x_left, z0_kn + dy, rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}", color="green", fontsize=16)
-
         ax.text(x_mid, z0_ana + dy, rf"$z_0(Analítico)$ = {z0_ana:.4f}{unit}", color="red", fontsize=16)
-
         if z0_nz is not None:
-            ax.text(x_left, z0_nz - 2.5*dy, rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}", color="purple", fontsize=16)
+            ax.text(x_left, z0_nz - 2.5 * dy, rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}", color="purple", fontsize=16)
 
         # eixos / grid / legenda
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_xlim(0.0, umax * 1.05)
         ax.set_ylim(0.0, zmax * 1.05)
-        
+
         style_axes(
             ax,
             xfmt="%.2f",
             yfmt="%.3f",
             nbins_x=6,
             nbins_y=7,
-            minor_grid=False,   # deixa LIMPO igual referência
+            minor_grid=False,   # limpo
         )
 
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.22), ncol=3, frameon=False)
@@ -281,4 +312,3 @@ def plot_triplets_with_computed_theory(
         generated.append(out_path)
 
     return generated
-
