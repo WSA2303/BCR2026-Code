@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 from pathlib import Path
 
 from csv_plotter.io_csv import list_csv_files, load_xy_from_csv
@@ -31,8 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--swap", action="store_true", help="Inverte os eixos")
     p.add_argument("--dpi", type=int, default=300, help="DPI do PNG (default: 300)")
     p.add_argument("--zmax", type=float, default=0.036, help="Limite superior do eixo z (default: 0.036)")
-
     return p
+
 
 def next_available_path(out_path: Path) -> Path:
     """Se out_path já existir, retorna out_path com ' (1)', ' (2)', ..."""
@@ -49,6 +48,7 @@ def next_available_path(out_path: Path) -> Path:
         if not candidate.exists():
             return candidate
         i += 1
+
 
 def label_from_filename(stem: str) -> str | None:
     name = stem.lower()
@@ -102,6 +102,20 @@ def maybe_convert_units_to_cm(df, xcol: str, ycol: str, zmax_m: float):
 
     return df2, ylim, xlabel, ylabel, xfmt, yfmt
 
+
+def _is_profile_csv(path: Path) -> bool:
+    """
+    Ignora CSVs auxiliares (ex: z0_manual.csv), para o CLI não tentar plotar
+    arquivos que não têm colunas U_0 e z.
+    """
+    name = path.name.lower()
+    if "z0_manual" in name:
+        return False
+    # se você criar outros auxiliares, adicione aqui:
+    # if "algum_outro" in name: return False
+    return True
+
+
 def main() -> None:
     args = build_parser().parse_args()
 
@@ -109,17 +123,18 @@ def main() -> None:
     output_dir = resolve_from_root(args.output_dir, "outputs")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Limite do eixo vertical APENAS quando "z" estiver no eixo Y do gráfico
-    ylim = None
-    if (not args.swap and args.ycol == "z") or (args.swap and args.xcol == "z"):
-        ylim = (0.0, args.zmax)
+    # pega todos os csv e FILTRA os auxiliares
+    csv_files = [p for p in list_csv_files(input_dir) if _is_profile_csv(p)]
 
-    csv_files = list_csv_files(input_dir)
-
-    # 1) PNGs dos CSVs
+    # 1) PNGs individuais dos CSVs (somente os que têm as colunas esperadas)
     for csv_path in csv_files:
-        df = load_xy_from_csv(csv_path, args.xcol, args.ycol)
-        
+        try:
+            df = load_xy_from_csv(csv_path, args.xcol, args.ycol)
+        except KeyError as e:
+            # Não trava o processamento todo se tiver algum CSV "diferente" perdido na pasta
+            print(f"[SKIP] {csv_path.name}: {e}")
+            continue
+
         # legenda baseada no nome do arquivo
         label = label_from_filename(csv_path.stem)
 
@@ -128,11 +143,7 @@ def main() -> None:
             df, args.xcol, args.ycol, args.zmax
         )
 
-        if args.swap:
-            out_name = f"{csv_path.stem}_{args.ycol}_vs_{args.xcol}.png"
-        else:
-            out_name = f"{csv_path.stem}_{args.xcol}_vs_{args.ycol}.png"
-
+        out_name = f"{csv_path.stem}.png"
         out_path = next_available_path(output_dir / out_name)
 
         plot_xy(
@@ -140,8 +151,8 @@ def main() -> None:
             xcol=args.xcol,
             ycol=args.ycol,
             out_path=out_path,
-            title=None,            # <- igual ao estilo “limpo”
-            label=label,           # <- aqui entra sua legenda automática
+            title=None,
+            label=label,
             swap=args.swap,
             dpi=args.dpi,
             ylim=ylim_plot,
@@ -151,17 +162,22 @@ def main() -> None:
             yfmt=yfmt,
         )
         print(f"[OK] {out_path}")
-    
-    # 2) Triplet: ref + 1000 + theory_velocity (global)
+
+    # 2) Triplet: (Analítico + ref/1000 do que existir)
+    # usa a lista já filtrada (sem z0_manual)
     generated = plot_triplets_with_computed_theory(
-    csv_files=csv_files,
-    output_dir=output_dir,
-    xcol=args.xcol,
-    ycol=args.ycol,
-    dpi=args.dpi,
+        csv_files=csv_files,
+        output_dir=output_dir,
+        xcol=args.xcol,
+        ycol=args.ycol,
+        dpi=args.dpi,
     )
 
     for p in generated:
         print(f"[OK][TRIPLE] {p}")
 
     print(f"\nPronto! Imagens em: {output_dir}")
+
+
+if __name__ == "__main__":
+    main()

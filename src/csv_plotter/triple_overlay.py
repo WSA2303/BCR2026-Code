@@ -10,21 +10,7 @@ import matplotlib.pyplot as plt
 from csv_plotter.io_csv import load_xy_from_csv
 from csv_plotter.plotting import apply_plot_style, style_axes
 from csv_plotter.theory import u_vertical
-
-
-# ======= PARÂMETROS FIXOS DO ANALÍTICO (sempre os mesmos) =======
-THEORY_PARAMS = {
-    "ty": 39.808,
-    "Kn": 0.91,
-    "n": 1.0,
-    "rho": 1560.0,
-    "th_deg": 15.0,
-    "h": 0.033482,
-    "dz": None,        # se None -> usa h/100000 (igual run_theory)
-    "adm": False,
-}
-# ===============================================================
-
+from csv_plotter.theory_params import THEORY_PARAMS
 
 def _next_available_path(out_path: Path) -> Path:
     if not out_path.exists():
@@ -101,7 +87,8 @@ def load_manual_z0(path: Path) -> dict[str, dict[str, float]]:
     if not path.exists():
         return {}
 
-    df = pd.read_csv(path)  # seu arquivo está com vírgulas
+    df = pd.read_csv(path, encoding="utf-8-sig")  # seu arquivo está com vírgulas
+    df.columns = [c.strip() for c in df.columns]
     out: dict[str, dict[str, float]] = {}
 
     for _, row in df.iterrows():
