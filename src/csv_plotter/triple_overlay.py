@@ -267,19 +267,48 @@ def plot_triplets_with_computed_theory(
         # textos
         x_left = 0.05 * umax
         x_mid = 0.33 * umax
-        dy = 0.02 * zmax
+        dy = 0.01 * zmax   # um pouco maior pra não encostar
 
+        # verde: abaixo da linha verde
         if z0_kn is not None:
-            ax.text(x_left, z0_kn + dy, rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}", color="green", fontsize=16)
-        ax.text(x_mid, z0_ana + dy, rf"$z_0(Analítico)$ = {z0_ana:.4f}{unit}", color="red", fontsize=16)
+            ax.text(
+                x_left,
+                z0_kn - dy,
+                rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
+                color="green",
+                fontsize=16,
+                va="top",   # ancora pelo topo do texto (fica abaixo da linha)
+            )
+
+        # vermelho (analítico): mantém acima
+        ax.text(
+            x_mid,
+            z0_ana + dy,
+            rf"$z_0(Analítico)$ = {z0_ana:.4f}{unit}",
+            color="red",
+            fontsize=16,
+            va="bottom",
+        )
+
+        # roxo: acima da linha roxa
         if z0_nz is not None:
-            ax.text(x_left, z0_nz - 2.5 * dy, rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}", color="purple", fontsize=16)
+            ax.text(
+                x_left,
+                z0_nz + dy,
+                rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
+                color="purple",
+                fontsize=16,
+                va="bottom",  # ancora pela base do texto (fica acima da linha)
+            )
 
         # eixos / grid / legenda
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_xlim(0.0, umax * 1.05)
-        ax.set_ylim(0.0, zmax * 1.05)
+        if in_meters:          
+            ax.set_ylim(0.0, 3.345)
+        else:                   
+            ax.set_ylim(0.0, 0.03345)
 
         style_axes(
             ax,
