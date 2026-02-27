@@ -6,6 +6,7 @@ from pathlib import Path
 from csv_plotter.io_csv import list_csv_files, load_xy_from_csv
 from csv_plotter.plotting import plot_xy
 from csv_plotter.triple_overlay import plot_triplets_with_computed_theory
+from csv_plotter.naming import parse_case_name 
 
 
 def project_root() -> Path:
@@ -51,12 +52,10 @@ def next_available_path(out_path: Path) -> Path:
 
 
 def label_from_filename(stem: str) -> str | None:
-    name = stem.lower()
-    if "ref" in name:
-        return r"$\eta_0 = f(N_z)$"
-    if "1000" in name:
-        return r"$\eta_0 = f(K_n)$"
-    return None
+    info = parse_case_name(stem)
+    if info is None:
+        return None
+    return r"$\eta_0 = f(N_z)$" if info.method == "nz" else r"$\eta_0 = f(K_n)$"
 
 
 def maybe_convert_units_to_cm(df, xcol: str, ycol: str, zmax_m: float):

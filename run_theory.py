@@ -5,6 +5,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import pandas as pd 
 
 # garante ./src no sys.path
 ROOT = Path(__file__).resolve().parent
@@ -42,6 +43,15 @@ def main():
     z_cm = z_m * 100.0
     z0_cm = z0 * 100.0
 
+    df = pd.DataFrame({
+        "z_cm": z_cm,
+        "u_cm_s": u_cm_s,
+    })
+
+    csv_path = out_dir / "theory_zcm_ucms.csv"
+    df.to_csv(csv_path, index=False)
+    print(" -", csv_path)
+
     plt.plot(u_cm_s, z_cm, color="black", linewidth=3.0)
     plt.axhline(y=z0_cm, color="red", linestyle="--", linewidth=2.0)
 
@@ -67,39 +77,6 @@ def main():
     plt.tight_layout()
     plt.savefig(out_dir / "theory_velocity.png", dpi=150)
     plt.close()
-
-    # ========= 2) PERFIL DE "VISCOSIDADE" =========
-    plt.figure(figsize=(10, 5))
-
-    nu_like = np.array(eta) / rho  # igual ao seu colab (eta/rho)
-
-    plt.plot(nu_like, z_cm, color="black", linewidth=3.0)
-    plt.axhline(y=z0_cm, color="red", linestyle="--", linewidth=2.0)
-
-    plt.text(
-        x=float(np.max(nu_like)) * 0.05,
-        y=z0_cm + (h * 100.0) * 0.02,
-        s=f"$Z_0$ = {z0_cm:.2f} cm",
-        color="red",
-        fontsize=14,
-    )
-
-    plt.yticks(yt, labels=np.round(yt, 2))
-
-    plt.ylabel(r"$z(cm)$", fontsize=16)
-    plt.xlabel(r"$\\eta$ [Pa.s]", fontsize=16)
-
-    plt.xscale("log")
-    plt.grid(True, which="both", ls="--", linewidth=1.5, color="0.7")
-
-    plt.tight_layout()
-    plt.savefig(out_dir / "theory_viscosity.png", dpi=150)
-    plt.close()
-
-    print("[OK] Gerados:")
-    print(" -", out_dir / "theory_velocity.png")
-    print(" -", out_dir / "theory_viscosity.png")
-
 
 if __name__ == "__main__":
     main()
