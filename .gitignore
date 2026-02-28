@@ -1,3 +1,4 @@
 # Ignorar qualquer CSV e PNG do projeto inteiro
 *.csv
 *.png
+*.txt

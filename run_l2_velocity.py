@@ -72,7 +72,7 @@ def plot_one_C(res_df: pd.DataFrame, out_path: Path) -> None:
 def load_theory_csv(theory_path: Path) -> tuple[np.ndarray, np.ndarray]:
     """
     Lê o CSV da teoria e retorna (z_th_m, u_th_mps) em SI.
-    Espera colunas tipo: z_cm,u_cm_s (como você mostrou).
+    Espera colunas: z_cm,u_cm_s.
     """
     if not theory_path.exists():
         raise FileNotFoundError(f"Não encontrei o CSV da teoria em: {theory_path}")
@@ -80,18 +80,15 @@ def load_theory_csv(theory_path: Path) -> tuple[np.ndarray, np.ndarray]:
     df = pd.read_csv(theory_path, encoding="utf-8-sig", sep=None, engine="python")
     df.columns = [c.strip().lstrip("\ufeff") for c in df.columns]
 
-    # nomes esperados no seu arquivo
     if "z_cm" not in df.columns or "u_cm_s" not in df.columns:
         raise KeyError(f"Teoria precisa ter colunas z_cm e u_cm_s. Colunas: {list(df.columns)}")
 
     z_cm = df["z_cm"].to_numpy(dtype=float)
     u_cm_s = df["u_cm_s"].to_numpy(dtype=float)
 
-    # converte p/ SI
     z_m = z_cm / 100.0
     u_mps = u_cm_s / 100.0
 
-    # ordena por z e remove NaN
     mask = np.isfinite(z_m) & np.isfinite(u_mps)
     z_m = z_m[mask]
     u_mps = u_mps[mask]
@@ -100,16 +97,42 @@ def load_theory_csv(theory_path: Path) -> tuple[np.ndarray, np.ndarray]:
     z_m = z_m[order]
     u_mps = u_mps[order]
 
-    # remove duplicatas de z (às vezes aparecem)
     z_unique, idx = np.unique(z_m, return_index=True)
     u_unique = u_mps[idx]
 
     return z_unique, u_unique
 
 
+def c_token_from_filename(stem: str) -> str:
+    """
+    Extrai o primeiro token do nome (antes do primeiro '_').
+    Ex: '03_100_1000' -> '03'
+        '09_200_ref'  -> '09'
+    """
+    return stem.split("_", 1)[0].strip()
+
+
+def c_token_to_float(c_token: str) -> float:
+    """
+    Mapeia tokens tipo '03'/'09' -> 0.3/0.9.
+    Aceita também '3','9','0.3','0.9'.
+    """
+    t = str(c_token).strip().replace(",", ".")
+    if t in {"03", "3", "0.3"}:
+        return 0.3
+    if t in {"09", "9", "0.9"}:
+        return 0.9
+    raise ValueError(f"C inválido no nome do arquivo: {c_token!r}. Esperado 03 ou 09.")
+
+
+def theory_path_for_C(out_dir: Path, c_token: str) -> Path:
+    C = c_token_to_float(c_token)
+    return out_dir / f"theory_zcm_ucms_C{C:.1f}.csv"
+
+
 def normalize_numeric_to_SI(df: pd.DataFrame, xcol: str, ycol: str) -> tuple[np.ndarray, np.ndarray]:
     """
-    Numérico: assume que vem em SI (m e m/s), como típico do OpenFOAM.
+    Numérico: assume SI (m e m/s).
     """
     z = df[ycol].to_numpy(dtype=float)
     u = df[xcol].to_numpy(dtype=float)
@@ -123,9 +146,6 @@ def normalize_numeric_to_SI(df: pd.DataFrame, xcol: str, ycol: str) -> tuple[np.
 def prepare_domain(z_num: np.ndarray, u_num: np.ndarray, h_th: float) -> tuple[np.ndarray, np.ndarray, str]:
     """
     Ajusta o domínio do numérico para comparar com teoria em [0, h_th].
-    - se zmax ~ h_th -> usa tudo
-    - se zmax ~ 2*h_th -> corta em 0..h_th
-    - senão -> reescala (fallback) para 0..h_th
     """
     z0 = z_num - float(np.min(z_num))
     zmax = float(np.max(z0))
@@ -138,8 +158,7 @@ def prepare_domain(z_num: np.ndarray, u_num: np.ndarray, h_th: float) -> tuple[n
         mask = z0 <= h_th
         return z0[mask], u_num[mask], f"CUT 0..h (ratio={ratio:.3f})"
 
-    # fallback: reescala
-    z_use = z0 * (h_th / zmax) if zmax > 0 else z0
+    z_use = z0 * (h_th / zmax) if zmax > 0 and h_th > 0 else z0
     return z_use, u_num, f"RESCALE (ratio={ratio:.3f})"
 
 
@@ -148,28 +167,67 @@ def main():
     out_dir = ROOT / "outputs"
     out_dir.mkdir(exist_ok=True)
 
-    # teoria vem do outputs (como você mostrou)
-    theory_path = out_dir / "theory_zcm_ucms.csv"
-    z_th, u_th = load_theory_csv(theory_path)
-    h_th = float(np.max(z_th))
-
     xcol, ycol = "U_0", "z"
 
     csvs = [p for p in data_dir.glob("*.csv") if "z0_manual" not in p.name.lower()]
+    if not csvs:
+        raise SystemExit("Não encontrei CSVs em data/.")
 
+    # -------------------------
+    # Agrupa por C (03/09)
+    # -------------------------
     by_C: dict[str, list[tuple[int, str, Path]]] = defaultdict(list)
+
     for p in csvs:
-        info = parse_case_name(p.stem)  # padrão: 09_100_ref / 03_25_1000
-        if info is None:
-            continue
-        by_C[info.C].append((info.X, info.method, p))
+        info = parse_case_name(p.stem)
+        if info is not None:
+            c_token = str(info.C)
+            X = info.X
+            method = info.method
+        else:
+            # fallback mínimo: pega C do nome e tenta extrair X/method do padrão esperado
+            c_token = c_token_from_filename(p.stem)
 
-    if not by_C:
-        raise SystemExit("Não encontrei arquivos no padrão 'C_X_ref.csv' ou 'C_X_1000.csv' em data/.")
+            parts = p.stem.split("_")
+            if len(parts) < 3:
+                print(f"[SKIP] Nome fora do padrão: {p.name}")
+                continue
 
+            try:
+                X = int(parts[1])
+            except Exception:
+                print(f"[SKIP] Não consegui ler X em: {p.name}")
+                continue
+
+            # último token: 'ref' ou '1000' (você usa 'method' = 'kn'/'nz' no seu parse_case_name;
+            # se aqui cair no fallback, você pode ajustar conforme sua convenção)
+            last = parts[-1].lower()
+            method = "kn" if "1000" in last else "nz" if "ref" in last else "nz"
+
+        by_C[c_token].append((X, method, p))
+
+    # -------------------------
+    # Cache da teoria por C
+    # -------------------------
+    theory_cache: dict[str, tuple[np.ndarray, np.ndarray, float, Path]] = {}
+
+    def get_theory(c_token: str) -> tuple[np.ndarray, np.ndarray, float, Path]:
+        if c_token in theory_cache:
+            return theory_cache[c_token]
+        tpath = theory_path_for_C(out_dir, c_token)
+        z_th, u_th = load_theory_csv(tpath)
+        h_th = float(np.max(z_th)) if len(z_th) else 0.0
+        theory_cache[c_token] = (z_th, u_th, h_th, tpath)
+        return theory_cache[c_token]
+
+    # -------------------------
+    # Calcula L2
+    # -------------------------
     all_rows = []
 
-    for C, items in by_C.items():
+    for c_token, items in by_C.items():
+        z_th, u_th, h_th, tpath = get_theory(c_token)
+
         for X, method, path in items:
             mult = X_TO_MULT.get(X)
             if mult is None:
@@ -179,36 +237,39 @@ def main():
             df = load_xy_from_csv(path, xcol, ycol)
             z_num, u_num = normalize_numeric_to_SI(df, xcol, ycol)
 
-            # ajusta domínio do numérico para comparar no domínio da teoria
             z_use, u_use, msg = prepare_domain(z_num, u_num, h_th)
-
-            # interpola teoria nos z do numérico (adaptativo)
             u_ref = np.interp(z_use, z_th, u_th)
 
-            # L2 contínuo no grid do numérico
             err = l2_norm_percent_continuous(z_use, u_use, u_ref)
 
             all_rows.append({
-                "C": C,
+                "C": c_token,
                 "method": method,
                 "X": X,
                 "mult": mult,
                 "L2_percent": err,
                 "file": path.name,
                 "domain_fix": msg,
+                "theory_file": tpath.name,
             })
 
+    if not all_rows:
+        raise SystemExit("Nenhum caso válido para calcular L2.")
+
     all_df = pd.DataFrame(all_rows).sort_values(["C", "method", "mult"])
-    all_df.to_csv(out_dir / "l2_velocity_table.csv", index=False)
+    table_path = out_dir / "l2_velocity_table.csv"
+    all_df.to_csv(table_path, index=False)
 
-    for C in sorted(by_C.keys(), key=lambda s: int(s)):
-        sub = all_df[all_df["C"] == C].copy()
-        out_png = out_dir / f"l2_velocity_C{C}.png"
+    # -------------------------
+    # Gera UMA figura por C
+    # -------------------------
+    for c_token in sorted(by_C.keys(), key=lambda s: c_token_to_float(s)):
+        sub = all_df[all_df["C"] == c_token].copy()
+        out_png = out_dir / f"l2_velocity_C{c_token}.png"
         plot_one_C(sub, out_png)
-        print("[OK] Figura:", out_png)
+        print("[OK] Figura:", out_png, "| Teoria:", theory_path_for_C(out_dir, c_token).name)
 
-    print("[OK] Tabela:", out_dir / "l2_velocity_table.csv")
-    print("[OK] Teoria usada:", theory_path)
+    print("[OK] Tabela:", table_path)
 
 
 if __name__ == "__main__":
