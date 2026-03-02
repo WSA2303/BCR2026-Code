@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from csv_plotter.io_csv import load_xy_from_csv
 from csv_plotter.plotting import apply_plot_style, style_axes
 from csv_plotter.theory import u_vertical
-from csv_plotter.theory_params import THEORY_PARAMS
+from csv_plotter.theory_params import THEORY_PARAMS, set_theory_params
 from csv_plotter.naming import parse_case_name
 
 
@@ -67,7 +67,6 @@ def load_manual_z0(path: Path) -> dict[str, dict[str, float]]:
     if "base" not in df.columns:
         raise ValueError(f"z0_manual.csv sem coluna 'base'. Colunas: {list(df.columns)}")
 
-    # normaliza base e converte valores
     df["base"] = df["base"].astype(str).str.strip()
 
     out: dict[str, dict[str, float]] = {}
@@ -116,7 +115,6 @@ def plot_triplets_with_computed_theory(
         info = parse_case_name(p.stem)
         if info is None:
             continue
-        # info.base = "09_100", info.method = "nz" (ref) ou "kn" (1000)
         groups.setdefault(info.base, {})[info.method] = p
 
     if not groups:
@@ -127,8 +125,24 @@ def plot_triplets_with_computed_theory(
     manual_path = data_dir / "z0_manual.csv"
     manual_z0 = load_manual_z0(manual_path)
 
-    # analítico (1 vez)
-    df_ana_m, z0_ana_m = compute_theory_df(xcol=xcol, ycol=ycol)
+    # ===== teoria por C (cache) =====
+    theory_cache: dict[str, tuple[pd.DataFrame, float]] = {}
+
+    def get_theory_for_base(base: str) -> tuple[pd.DataFrame, float]:
+        c_token = base.split("_", 1)[0].strip()  # "03" ou "09" (ou outros)
+        if c_token in theory_cache:
+            return theory_cache[c_token]
+
+        if base.startswith("03_"):
+            set_theory_params(0.3)
+        elif base.startswith("09_"):
+            set_theory_params(0.9)
+        else:
+            raise ValueError(f"Base sem C reconhecido: {base} (esperado começar com 03_ ou 09_)")
+
+        df_ana_m, z0_ana_m = compute_theory_df(xcol=xcol, ycol=ycol)
+        theory_cache[c_token] = (df_ana_m, z0_ana_m)
+        return theory_cache[c_token]
 
     generated: list[Path] = []
 
@@ -137,6 +151,9 @@ def plot_triplets_with_computed_theory(
         has_kn = "kn" in items
         if not (has_nz or has_kn):
             continue
+
+        # teoria correta para este base
+        df_ana_m, z0_ana_m = get_theory_for_base(base)
 
         df_ana = df_ana_m.copy()
         df_nz = load_xy_from_csv(items["nz"], xcol, ycol) if has_nz else None
@@ -201,12 +218,11 @@ def plot_triplets_with_computed_theory(
         umax = max(umax_candidates)
 
         out_path = _next_available_path(output_dir / f"{base}_triple.png")
-
         fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
 
         def markevery(df: pd.DataFrame) -> int:
-            n = len(df)
-            return max(1, n // 40)
+            npts = len(df)
+            return max(1, npts // 40)
 
         # Analítico
         ax.plot(df_ana[xcol], df_ana[ycol], color="black", linewidth=3.2, label="Analítico")
@@ -238,10 +254,13 @@ def plot_triplets_with_computed_theory(
         if z0_nz is not None:
             ax.axhline(z0_nz, color="purple", linestyle="--", linewidth=2.0)
 
-        # textos (posicionamento pedido)
+        # textos
         x_left = 0.05 * umax
         x_mid = 0.33 * umax
-        dy = 0.01 * zmax   # um pouco maior pra não encostar
+
+        # zmax_all foi calculado antes; ajuste para a unidade atual do plot
+        zmax = zmax_all * (100.0 if in_meters else 1.0)
+        dy = 0.01 * zmax
 
         # verde: abaixo da linha verde
         if z0_kn is not None:
@@ -251,10 +270,10 @@ def plot_triplets_with_computed_theory(
                 rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
                 color="green",
                 fontsize=16,
-                va="top",   # ancora pelo topo do texto (fica abaixo da linha)
+                va="top",
             )
 
-        # vermelho (analítico): mantém acima
+        # vermelho (analítico): acima
         ax.text(
             x_mid,
             z0_ana + dy,
@@ -272,16 +291,16 @@ def plot_triplets_with_computed_theory(
                 rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
                 color="purple",
                 fontsize=16,
-                va="bottom",  # ancora pela base do texto (fica acima da linha)
+                va="bottom",
             )
 
         # eixos
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_xlim(0.0, umax * 1.05)
-        if in_meters:          
+        if in_meters:
             ax.set_ylim(0.0, 3.345)
-        else:                   
+        else:
             ax.set_ylim(0.0, 0.03345)
 
         style_axes(
