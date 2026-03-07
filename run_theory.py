@@ -66,24 +66,26 @@ def main():
 
     # ========= FIGURA =========
     plt.plot(u_cm_s, z_cm, color="black", linewidth=3.0)
-    plt.axhline(y=z0_cm, color="red", linestyle="--", linewidth=2.0)
+    plt.axhline(y=z0_cm, color="green", linestyle="--", linewidth=2.0)
+    #plt.axvline(round(np.max(u_cm_s), 3), color="red", linestyle="--", linewidth=2.0)
 
     plt.text(
         x=float(np.max(u_cm_s)) * 0.03,
         y=z0_cm + (h * 100.0) * 0.02,
-        s=f"$Z_0$ = {z0_cm:.2f} cm",
-        color="red",
+        s=f"$Z_0$ = {z0_cm:.4f} cm",
+        color="green",
         fontsize=14,
     )
 
     yt = np.linspace(0, h * 100.0, 8)
     plt.yticks(yt, labels=np.round(yt, 2))
 
-    plt.ylabel(r"$z(cm)$", fontsize=16)
-    plt.xlabel(r"$u(cm/s)$", fontsize=16)
+    plt.ylabel(r"$z(cm)$", fontsize=20)
+    plt.xlabel(r"$u(cm/s)$", fontsize=20)
 
     ax = plt.gca()
-    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter("%.4f"))
+    ax.tick_params(axis="both", labelsize=18)
+    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter("%.2f"))
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.2f"))
 
     plt.grid(True, which="major", ls="--", linewidth=1.5, color="0.7")

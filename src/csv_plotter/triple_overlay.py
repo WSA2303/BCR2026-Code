@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 from csv_plotter.io_csv import load_xy_from_csv
 from csv_plotter.plotting import apply_plot_style, style_axes
@@ -26,6 +27,16 @@ def _next_available_path(out_path: Path) -> Path:
         if not cand.exists():
             return cand
         i += 1
+
+
+def _nz_from_base(base: str) -> int:
+    """
+    Extrai Nz de bases como '03_25', '09_100', etc.
+    """
+    try:
+        return int(base.split("_", 1)[1])
+    except (IndexError, ValueError):
+        return 10**9
 
 
 def compute_theory_df(xcol: str = "U_0", ycol: str = "z") -> tuple[pd.DataFrame, float]:
@@ -91,6 +102,209 @@ def load_manual_z0(path: Path) -> dict[str, dict[str, float]]:
     return out
 
 
+def _save_combined_triplets_by_c(
+    panel_cases: dict[str, list[dict]],
+    output_dir: Path,
+    dpi: int = 300,
+) -> list[Path]:
+    """
+    Gera figuras combinadas (2x2) diretamente em subplots, uma por valor de C.
+    Sem letras (a), (b), ...
+    Sem título 'C = ...' no topo.
+    Com legenda única para as 4 subfiguras.
+    """
+    generated_panels: list[Path] = []
+
+    legend_handles = [
+        Line2D([0], [0], color="black", linewidth=3.2, label="Analytical"),
+        Line2D(
+            [0], [0],
+            color="red", linewidth=2.0,
+            marker="o", markerfacecolor="none", markersize=6,
+            label=r"$\eta_0=f(N_z)$",
+        ),
+        Line2D(
+            [0], [0],
+            color="blue", linewidth=2.0,
+            marker="*", markersize=8,
+            label=r"$\eta_0=f(K_n)$",
+        ),
+    ]
+
+    for c_token, cases in sorted(panel_cases.items()):
+        if not cases:
+            continue
+
+        cases = sorted(cases, key=lambda d: _nz_from_base(d["base"]))
+
+        n = len(cases)
+        ncols = 2
+        nrows = int(np.ceil(n / ncols))
+
+        fig, axes = plt.subplots(
+            nrows=nrows,
+            ncols=ncols,
+            figsize=(16, 7),
+            dpi=dpi,
+        )
+        axes = np.atleast_1d(axes).ravel()
+
+        group_umax = max(float(case["umax"]) for case in cases)
+        any_in_meters = any(bool(case["in_meters"]) for case in cases)
+        ytop = 3.345 if any_in_meters else 0.03345
+
+        xlabel = cases[0]["xlabel"]
+        ylabel = cases[0]["ylabel"]
+        unit = cases[0]["unit"]
+
+        LABEL_FONTSIZE = 18
+        TICK_FONTSIZE = 13
+        LEGEND_FONTSIZE = 18
+        TEXT_FONTSIZE = 12
+        TITLE_FONTSIZE = 20
+
+        for i, case in enumerate(cases):
+            ax = axes[i]
+
+            base = case["base"]
+            df_ana = case["df_ana"]
+            df_nz = case["df_nz"]
+            df_kn = case["df_kn"]
+            z0_ana = case["z0_ana"]
+            z0_nz = case["z0_nz"]
+            z0_kn = case["z0_kn"]
+
+            def markevery(df: pd.DataFrame) -> int:
+                npts = len(df)
+                return max(1, npts // 40)
+
+            ax.plot(df_ana["U_0"], df_ana["z"], color="black", linewidth=3.2)
+
+            if df_nz is not None:
+                ax.plot(
+                    df_nz["U_0"], df_nz["z"],
+                    color="red", linewidth=2.0,
+                    marker="o", markerfacecolor="none", markersize=6,
+                    markevery=markevery(df_nz),
+                )
+
+            if df_kn is not None:
+                ax.plot(
+                    df_kn["U_0"], df_kn["z"],
+                    color="blue", linewidth=2.0,
+                    marker="*", markersize=8,
+                    markevery=markevery(df_kn),
+                )
+
+            ax.axhline(z0_ana, color="green", linestyle="--", linewidth=1.8)
+            if z0_kn is not None:
+                ax.axhline(z0_kn, color="blue", linestyle="--", linewidth=1.8)
+            if z0_nz is not None:
+                ax.axhline(z0_nz, color="red", linestyle="--", linewidth=1.8)
+
+            x_left = 0.05 * group_umax
+            x_mid = 0.33 * group_umax
+            x_right = 0.58 * group_umax
+
+            text_box = dict(
+                facecolor="white",
+                edgecolor="none",
+                alpha=0.85,
+                pad=0.2,
+            )
+
+            if z0_kn is not None:
+                ax.annotate(
+                    rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
+                    xy=(x_left, z0_kn),
+                    xytext=(0, -8),
+                    textcoords="offset points",
+                    color="blue",
+                    fontsize=TEXT_FONTSIZE,
+                    va="top",
+                    ha="left",
+                    bbox=text_box,
+                )
+
+            ax.annotate(
+                rf"$z_0(Analytical)$ = {z0_ana:.4f}{unit}",
+                xy=(x_mid, z0_ana),
+                xytext=(0, 8),
+                textcoords="offset points",
+                color="green",
+                fontsize=TEXT_FONTSIZE,
+                va="bottom",
+                ha="left",
+                bbox=text_box,
+            )
+
+            if z0_nz is not None:
+                ax.annotate(
+                    rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
+                    xy=(x_right, z0_nz),
+                    xytext=(0, 8),
+                    textcoords="offset points",
+                    color="red",
+                    fontsize=TEXT_FONTSIZE,
+                    va="bottom",
+                    ha="left",
+                    bbox=text_box,
+                )
+
+            ax.set_xlim(0.0, group_umax * 1.05)
+            ax.set_ylim(0.0, ytop)
+
+            style_axes(
+                ax,
+                xfmt="%.2f",
+                yfmt="%.3f",
+                nbins_x=6,
+                nbins_y=7,
+                minor_grid=False,
+            )
+            ax.tick_params(axis="both", labelsize=TICK_FONTSIZE)
+
+            nz = _nz_from_base(base)
+            ax.set_title(rf"$N_z = {nz}$", fontsize=TITLE_FONTSIZE, pad=6)
+
+            row = i // ncols
+            col = i % ncols
+
+            if row == nrows - 1:
+                ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
+            else:
+                ax.set_xlabel("")
+                ax.tick_params(axis="x", labelbottom=False)
+
+            if col == 0:
+                ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
+            else:
+                ax.set_ylabel("")
+                ax.tick_params(axis="y", labelleft=False)
+
+        for j in range(n, len(axes)):
+            axes[j].axis("off")
+
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.975),
+            ncol=3,
+            frameon=False,
+            fontsize=LEGEND_FONTSIZE,
+        )
+
+        fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.90))
+
+        out_path = _next_available_path(output_dir / f"C{c_token}_combined_triple.png")
+        fig.savefig(out_path, bbox_inches="tight")
+        plt.close(fig)
+
+        generated_panels.append(out_path)
+
+    return generated_panels
+
+
 def plot_triplets_with_computed_theory(
     csv_files: list[Path],
     output_dir: Path,
@@ -105,11 +319,14 @@ def plot_triplets_with_computed_theory(
       - se tiver ambos: plota (Analítico + ref + 1000)
 
     z0_ref e z0_1000 vêm de data/z0_manual.csv (manual).
+
+    Além das figuras individuais, gera também:
+      - C03_combined_triple.png
+      - C09_combined_triple.png
     """
     apply_plot_style()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # agrupa ref/1000 por base usando parse_case_name
     groups: dict[str, dict[str, Path]] = {}
     for p in csv_files:
         info = parse_case_name(p.stem)
@@ -120,16 +337,14 @@ def plot_triplets_with_computed_theory(
     if not groups:
         return []
 
-    # z0 manuais (cm)
     data_dir = output_dir.parent / "data"
     manual_path = data_dir / "z0_manual.csv"
     manual_z0 = load_manual_z0(manual_path)
 
-    # ===== teoria por C (cache) =====
     theory_cache: dict[str, tuple[pd.DataFrame, float]] = {}
 
     def get_theory_for_base(base: str) -> tuple[pd.DataFrame, float]:
-        c_token = base.split("_", 1)[0].strip()  # "03" ou "09" (ou outros)
+        c_token = base.split("_", 1)[0].strip()
         if c_token in theory_cache:
             return theory_cache[c_token]
 
@@ -145,6 +360,7 @@ def plot_triplets_with_computed_theory(
         return theory_cache[c_token]
 
     generated: list[Path] = []
+    panel_cases: dict[str, list[dict]] = {}
 
     for base, items in groups.items():
         has_nz = "nz" in items
@@ -152,14 +368,12 @@ def plot_triplets_with_computed_theory(
         if not (has_nz or has_kn):
             continue
 
-        # teoria correta para este base
         df_ana_m, z0_ana_m = get_theory_for_base(base)
 
         df_ana = df_ana_m.copy()
         df_nz = load_xy_from_csv(items["nz"], xcol, ycol) if has_nz else None
         df_kn = load_xy_from_csv(items["kn"], xcol, ycol) if has_kn else None
 
-        # decide unidade olhando z
         zmax_candidates = [float(df_ana[ycol].max())]
         if df_nz is not None:
             zmax_candidates.append(float(df_nz[ycol].max()))
@@ -167,10 +381,9 @@ def plot_triplets_with_computed_theory(
             zmax_candidates.append(float(df_kn[ycol].max()))
         zmax_all = max(zmax_candidates)
 
-        in_meters = zmax_all <= 0.5  # se z pequeno => veio em metros
+        in_meters = zmax_all <= 0.5
 
         if in_meters:
-            # converte tudo pra cm e cm/s
             df_ana[xcol] *= 100.0
             df_ana[ycol] *= 100.0
             if df_nz is not None:
@@ -180,7 +393,7 @@ def plot_triplets_with_computed_theory(
                 df_kn[xcol] *= 100.0
                 df_kn[ycol] *= 100.0
 
-            z0_ana = z0_ana_m * 100.0  # cm
+            z0_ana = z0_ana_m * 100.0
             xlabel = r"$u\ [cm/s]$"
             ylabel = r"$z\ [cm]$"
             unit = "cm"
@@ -189,13 +402,11 @@ def plot_triplets_with_computed_theory(
             z0_kn = manual_z0.get(base, {}).get("kn", None)
 
         else:
-            # metros (raro)
             z0_ana = z0_ana_m
             xlabel = xcol
             ylabel = ycol
             unit = ""
 
-            # manuais em cm -> m
             z0_nz = manual_z0.get(base, {}).get("nz", None)
             z0_kn = manual_z0.get(base, {}).get("kn", None)
             if z0_nz is not None:
@@ -203,13 +414,11 @@ def plot_triplets_with_computed_theory(
             if z0_kn is not None:
                 z0_kn = z0_kn / 100.0
 
-        # WARNs
         if df_nz is not None and z0_nz is None:
             print(f"[WARN] Sem z0_ref_cm para base={base} em data/z0_manual.csv")
         if df_kn is not None and z0_kn is None:
             print(f"[WARN] Sem z0_1000_cm para base={base} em data/z0_manual.csv")
 
-        # limites
         umax_candidates = [float(df_ana[xcol].max())]
         if df_nz is not None:
             umax_candidates.append(float(df_nz[xcol].max()))
@@ -218,16 +427,19 @@ def plot_triplets_with_computed_theory(
         umax = max(umax_candidates)
 
         out_path = _next_available_path(output_dir / f"{base}_triple.png")
-        fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
+        fig, ax = plt.subplots(figsize=(8, 4), dpi=dpi)
+
+        LABEL_FONTSIZE = 20
+        TICK_FONTSIZE = 14
+        LEGEND_FONTSIZE = 20
+        TEXT_FONTSIZE = 16
 
         def markevery(df: pd.DataFrame) -> int:
             npts = len(df)
             return max(1, npts // 40)
 
-        # Analítico
-        ax.plot(df_ana[xcol], df_ana[ycol], color="black", linewidth=3.2, label="Analítico")
+        ax.plot(df_ana[xcol], df_ana[ycol], color="black", linewidth=3.2, label="Analytical")
 
-        # ref (Nz)
         if df_nz is not None:
             ax.plot(
                 df_nz[xcol], df_nz[ycol],
@@ -237,7 +449,6 @@ def plot_triplets_with_computed_theory(
                 label=r"$\eta_0=f(N_z)$",
             )
 
-        # 1000 (Kn)
         if df_kn is not None:
             ax.plot(
                 df_kn[xcol], df_kn[ycol],
@@ -247,56 +458,63 @@ def plot_triplets_with_computed_theory(
                 label=r"$\eta_0=f(K_n)$",
             )
 
-        # linhas z0
-        ax.axhline(z0_ana, color="red", linestyle="--", linewidth=2.0)
+        ax.axhline(z0_ana, color="green", linestyle="--", linewidth=2.0)
         if z0_kn is not None:
-            ax.axhline(z0_kn, color="green", linestyle="--", linewidth=2.0)
+            ax.axhline(z0_kn, color="blue", linestyle="--", linewidth=2.0)
         if z0_nz is not None:
-            ax.axhline(z0_nz, color="purple", linestyle="--", linewidth=2.0)
+            ax.axhline(z0_nz, color="red", linestyle="--", linewidth=2.0)
 
-        # textos
         x_left = 0.05 * umax
         x_mid = 0.33 * umax
+        x_right = 0.58 * umax
 
-        # zmax_all foi calculado antes; ajuste para a unidade atual do plot
-        zmax = zmax_all * (100.0 if in_meters else 1.0)
-        dy = 0.01 * zmax
-
-        # verde: abaixo da linha verde
-        if z0_kn is not None:
-            ax.text(
-                x_left,
-                z0_kn - dy,
-                rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
-                color="green",
-                fontsize=16,
-                va="top",
-            )
-
-        # vermelho (analítico): acima
-        ax.text(
-            x_mid,
-            z0_ana + dy,
-            rf"$z_0(Analítico)$ = {z0_ana:.4f}{unit}",
-            color="red",
-            fontsize=16,
-            va="bottom",
+        text_box = dict(
+            facecolor="white",
+            edgecolor="none",
+            alpha=0.85,
+            pad=0.2,
         )
 
-        # roxo: acima da linha roxa
-        if z0_nz is not None:
-            ax.text(
-                x_left,
-                z0_nz + dy,
-                rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
-                color="purple",
-                fontsize=16,
-                va="bottom",
+        if z0_kn is not None:
+            ax.annotate(
+                rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
+                xy=(x_left, z0_kn),
+                xytext=(0, -10),
+                textcoords="offset points",
+                color="blue",
+                fontsize=TEXT_FONTSIZE,
+                va="top",
+                ha="left",
+                bbox=text_box,
             )
 
-        # eixos
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
+        ax.annotate(
+            rf"$z_0(Analytical)$ = {z0_ana:.4f}{unit}",
+            xy=(x_mid, z0_ana),
+            xytext=(0, 10),
+            textcoords="offset points",
+            color="green",
+            fontsize=TEXT_FONTSIZE,
+            va="bottom",
+            ha="left",
+            bbox=text_box,
+        )
+
+        if z0_nz is not None:
+            ax.annotate(
+                rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
+                xy=(x_right, z0_nz),
+                xytext=(0, 10),
+                textcoords="offset points",
+                color="red",
+                fontsize=TEXT_FONTSIZE,
+                va="bottom",
+                ha="left",
+                bbox=text_box,
+            )
+
+        ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
+        ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
         ax.set_xlim(0.0, umax * 1.05)
         if in_meters:
             ax.set_ylim(0.0, 3.345)
@@ -312,12 +530,45 @@ def plot_triplets_with_computed_theory(
             minor_grid=False,
         )
 
-        ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.22), ncol=3, frameon=False)
+        ax.tick_params(axis="both", labelsize=TICK_FONTSIZE)
+
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.22),
+            ncol=3,
+            frameon=False,
+            fontsize=LEGEND_FONTSIZE,
+        )
 
         fig.tight_layout()
         fig.savefig(out_path)
         plt.close(fig)
 
         generated.append(out_path)
+
+        c_token = base.split("_", 1)[0].strip()
+        panel_cases.setdefault(c_token, []).append(
+            {
+                "base": base,
+                "df_ana": df_ana.copy(),
+                "df_nz": None if df_nz is None else df_nz.copy(),
+                "df_kn": None if df_kn is None else df_kn.copy(),
+                "z0_ana": z0_ana,
+                "z0_nz": z0_nz,
+                "z0_kn": z0_kn,
+                "xlabel": xlabel,
+                "ylabel": ylabel,
+                "unit": unit,
+                "in_meters": in_meters,
+                "umax": umax,
+            }
+        )
+
+    panel_paths = _save_combined_triplets_by_c(
+        panel_cases=panel_cases,
+        output_dir=output_dir,
+        dpi=dpi,
+    )
+    generated.extend(panel_paths)
 
     return generated

@@ -39,7 +39,7 @@ def label_for_method(method: str) -> str:
 
 def plot_one_C(res_df: pd.DataFrame, out_path: Path) -> None:
     style_like_example()
-    fig, ax = plt.subplots(figsize=(6.2, 4.6), dpi=200)
+    fig, ax = plt.subplots(figsize=(6, 8), dpi=200)
 
     xticks = [1, 2, 4, 8]
     xticklabels = [r"$N_z$", r"$2N_z$", r"$4N_z$", r"$8N_z$"]
@@ -57,12 +57,12 @@ def plot_one_C(res_df: pd.DataFrame, out_path: Path) -> None:
 
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels)
-    ax.set_xlabel("Número de volumes")
-    ax.set_ylabel(r"Norma $L_2$ (\%) — Perfil de velocidade")
+    ax.set_xlabel("Number of volumes")
+    ax.set_ylabel(r"Norma $L_2$ (\%) — Velocity profile")
     ax.set_xlim(0.8, 8.2)
 
     ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.75")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.16), ncol=2, frameon=False)
+    #ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.16), ncol=2, frameon=False)
 
     fig.tight_layout()
     fig.savefig(out_path)

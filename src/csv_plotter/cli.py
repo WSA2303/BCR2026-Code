@@ -125,42 +125,42 @@ def main() -> None:
     # pega todos os csv e FILTRA os auxiliares
     csv_files = [p for p in list_csv_files(input_dir) if _is_profile_csv(p)]
 
-    # 1) PNGs individuais dos CSVs (somente os que têm as colunas esperadas)
-    for csv_path in csv_files:
-        try:
-            df = load_xy_from_csv(csv_path, args.xcol, args.ycol)
-        except KeyError as e:
-            # Não trava o processamento todo se tiver algum CSV "diferente" perdido na pasta
-            print(f"[SKIP] {csv_path.name}: {e}")
-            continue
+    # # 1) PNGs individuais dos CSVs (somente os que têm as colunas esperadas)
+    # for csv_path in csv_files:
+    #     try:
+    #         df = load_xy_from_csv(csv_path, args.xcol, args.ycol)
+    #     except KeyError as e:
+    #         # Não trava o processamento todo se tiver algum CSV "diferente" perdido na pasta
+    #         print(f"[SKIP] {csv_path.name}: {e}")
+    #         continue
 
-        # legenda baseada no nome do arquivo
-        label = label_from_filename(csv_path.stem)
+    #     # legenda baseada no nome do arquivo
+    #     label = label_from_filename(csv_path.stem)
 
-        # converte unidades (se precisar) e define ylim/labels/formatos
-        df_plot, ylim_plot, xlabel, ylabel, xfmt, yfmt = maybe_convert_units_to_cm(
-            df, args.xcol, args.ycol, args.zmax
-        )
+    #     # converte unidades (se precisar) e define ylim/labels/formatos
+    #     df_plot, ylim_plot, xlabel, ylabel, xfmt, yfmt = maybe_convert_units_to_cm(
+    #         df, args.xcol, args.ycol, args.zmax
+    #     )
 
-        out_name = f"{csv_path.stem}.png"
-        out_path = next_available_path(output_dir / out_name)
+    #     out_name = f"{csv_path.stem}.png"
+    #     out_path = next_available_path(output_dir / out_name)
 
-        plot_xy(
-            df=df_plot,
-            xcol=args.xcol,
-            ycol=args.ycol,
-            out_path=out_path,
-            title=None,
-            label=label,
-            swap=args.swap,
-            dpi=args.dpi,
-            ylim=ylim_plot,
-            xlabel=xlabel,
-            ylabel=ylabel,
-            xfmt=xfmt,
-            yfmt=yfmt,
-        )
-        print(f"[OK] {out_path}")
+    #     plot_xy(
+    #         df=df_plot,
+    #         xcol=args.xcol,
+    #         ycol=args.ycol,
+    #         out_path=out_path,
+    #         title=None,
+    #         label=label,
+    #         swap=args.swap,
+    #         dpi=args.dpi,
+    #         ylim=ylim_plot,
+    #         xlabel=xlabel,
+    #         ylabel=ylabel,
+    #         xfmt=xfmt,
+    #         yfmt=yfmt,
+    #     )
+    #     print(f"[OK] {out_path}")
 
     # 2) Triplet: (Analítico + ref/1000 do que existir)
     # usa a lista já filtrada (sem z0_manual)
