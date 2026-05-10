@@ -5,7 +5,10 @@ from pathlib import Path
 
 from csv_plotter.io_csv import list_csv_files, load_xy_from_csv
 from csv_plotter.plotting import plot_xy
-from csv_plotter.triple_overlay import plot_triplets_with_computed_theory
+from csv_plotter.triple_overlay import (
+    plot_triplets_with_computed_theory,
+    plot_eta_triplets_with_computed_theory,
+)
 from csv_plotter.naming import parse_case_name 
 
 
@@ -31,6 +34,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--swap", action="store_true", help="Inverte os eixos")
     p.add_argument("--dpi", type=int, default=300, help="DPI do PNG (default: 300)")
     p.add_argument("--zmax", type=float, default=0.036, help="Limite superior do eixo z (default: 0.036)")
+    p.add_argument(
+    "--eta_xcol",
+    default="nu1",
+    help="Coluna do eixo x para os gráficos de viscosidade (default: nu1)",)
     return p
 
 
@@ -162,8 +169,7 @@ def main() -> None:
     #     )
     #     print(f"[OK] {out_path}")
 
-    # 2) Triplet: (Analítico + ref/1000 do que existir)
-    # usa a lista já filtrada (sem z0_manual)
+# 2) Triplet de velocidade: U_0 x z
     generated = plot_triplets_with_computed_theory(
         csv_files=csv_files,
         output_dir=output_dir,
@@ -175,8 +181,18 @@ def main() -> None:
     for p in generated:
         print(f"[OK][TRIPLE] {p}")
 
-    print(f"\nPronto! Imagens em: {output_dir}")
 
+# 3) Triplet de viscosidade: nu1 x z
+    generated_eta = plot_eta_triplets_with_computed_theory(
+        csv_files=csv_files,
+        output_dir=output_dir,
+        xcol=args.eta_xcol,
+        ycol=args.ycol,
+        dpi=args.dpi,
+    )
+
+    for p in generated_eta:
+        print(f"[OK][ETA TRIPLE] {p}")
 
 if __name__ == "__main__":
     main()

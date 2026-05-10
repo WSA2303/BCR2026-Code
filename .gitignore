@@ -1,4 +1,4 @@
-# Ignorar qualquer CSV e PNG do projeto inteiro
+# Ignorar qualquer CSV, PNG e TXT do projeto inteiro
 *.csv
 *.png
 *.txt
