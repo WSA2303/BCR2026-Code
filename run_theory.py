@@ -1,4 +1,3 @@
-# run_theory.py
 from pathlib import Path
 import sys
 import math
@@ -45,29 +44,36 @@ def main():
 
     uz, u_avg, z0, gamma, eta = u_vertical(ty, kn, n, rho, th, h, dz, adm)
 
-    # ========= PERFIL DE VELOCIDADE =========
-    plt.figure(figsize=(10, 5))
-
+    # =========================================================
+    # DADOS BASE
+    # =========================================================
     z_m = np.linspace(0, h, len(uz))
-    u_cm_s = np.array(uz) * 100.0
     z_cm = z_m * 100.0
     z0_cm = z0 * 100.0
 
-    # ========= CSV (somente z_cm e u_cm_s) =========
-    df = pd.DataFrame(
+    u_cm_s = np.array(uz, dtype=float) * 100.0
+    eta = np.array(eta, dtype=float)
+
+    # =========================================================
+    # 1) CSV DO PERFIL DE VELOCIDADE
+    # =========================================================
+    df_vel = pd.DataFrame(
         {
             "z_cm": z_cm,
             "u_cm_s": u_cm_s,
         }
     )
-    csv_path = out_dir / f"theory_zcm_ucms_C{args.C:.1f}.csv"
-    df.to_csv(csv_path, index=False)
-    print("[OK] CSV:", csv_path)
+    csv_vel_path = out_dir / f"theory_zcm_ucms_C{args.C:.1f}.csv"
+    df_vel.to_csv(csv_vel_path, index=False)
+    print("[OK] CSV velocidade:", csv_vel_path)
 
-    # ========= FIGURA =========
+    # =========================================================
+    # 2) FIGURA DO PERFIL DE VELOCIDADE
+    # =========================================================
+    plt.figure(figsize=(10, 5))
+
     plt.plot(u_cm_s, z_cm, color="black", linewidth=3.0)
     plt.axhline(y=z0_cm, color="green", linestyle="--", linewidth=2.0)
-    #plt.axvline(round(np.max(u_cm_s), 3), color="red", linestyle="--", linewidth=2.0)
 
     plt.text(
         x=float(np.max(u_cm_s)) * 0.03,
@@ -90,11 +96,77 @@ def main():
 
     plt.grid(True, which="major", ls="--", linewidth=1.5, color="0.7")
     plt.tight_layout()
-    fig_path = out_dir / f"theory_velocity_C{args.C:.1f}.png"
-    plt.savefig(fig_path, dpi=150)
+
+    fig_vel_path = out_dir / f"theory_velocity_C{args.C:.1f}.png"
+    plt.savefig(fig_vel_path, dpi=150)
     plt.close()
 
-    print("[OK] Figura:", fig_path)
+    print("[OK] Figura velocidade:", fig_vel_path)
+
+    # =========================================================
+    # 3) CSV DO PERFIL DE VISCOSIDADE
+    # =========================================================
+    df_eta = pd.DataFrame(
+        {
+            "z_cm": z_cm,
+            "eta_Pa_s": eta,
+        }
+    )
+    csv_eta_path = out_dir / f"theory_zcm_eta_C{args.C:.1f}.csv"
+    df_eta.to_csv(csv_eta_path, index=False)
+    print("[OK] CSV viscosidade:", csv_eta_path)
+
+    # =========================================================
+    # 4) FIGURA DO PERFIL DE VISCOSIDADE (EIXO X LOG)
+    # =========================================================
+    # Para escala logarítmica, mantemos apenas valores positivos e finitos
+    mask_eta = np.isfinite(eta) & (eta > 0.0)
+    eta_plot = eta[mask_eta]
+    z_cm_eta = z_cm[mask_eta]
+
+    if len(eta_plot) == 0:
+        print("[AVISO] Nenhum valor positivo de viscosidade encontrado para plotar em escala log.")
+    else:
+        plt.figure(figsize=(10, 5))
+
+        plt.plot(eta_plot, z_cm_eta, color="black", linewidth=3.0)
+        plt.axhline(y=z0_cm, color="green", linestyle="--", linewidth=2.0)
+
+        ax = plt.gca()
+        ax.set_xscale("log")
+
+        # posição do texto adaptada para escala log
+        x_min = np.min(eta_plot)
+        x_max = np.max(eta_plot)
+        x_text = 10 ** (np.log10(x_min) + 0.05 * (np.log10(x_max) - np.log10(x_min)))
+
+        plt.text(
+            x=x_text,
+            y=z0_cm + (h * 100.0) * 0.02,
+            s=f"$Z_0$ = {z0_cm:.4f} cm",
+            color="green",
+            fontsize=14,
+        )
+
+        yt = np.linspace(0, h * 100.0, 8)
+        plt.yticks(yt, labels=np.round(yt, 2))
+
+        plt.ylabel(r"$z(cm)$", fontsize=20)
+        plt.xlabel(r"$\eta(Pa \cdot s)$", fontsize=20)
+
+        ax.tick_params(axis="both", labelsize=18)
+        ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.2f"))
+
+        plt.grid(True, which="major", ls="--", linewidth=1.5, color="0.7")
+        plt.grid(True, which="minor", ls=":", linewidth=1.0, color="0.8")
+
+        plt.tight_layout()
+
+        fig_eta_path = out_dir / f"theory_viscosity_C{args.C:.1f}.png"
+        plt.savefig(fig_eta_path, dpi=150)
+        plt.close()
+
+        print("[OK] Figura viscosidade:", fig_eta_path)
 
 
 if __name__ == "__main__":

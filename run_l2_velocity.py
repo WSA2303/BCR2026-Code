@@ -16,10 +16,43 @@ from csv_plotter.l2norm import l2_norm_percent_continuous     # noqa: E402
 from csv_plotter.naming import parse_case_name                # noqa: E402
 
 
-# Mapeamento FIXO: X -> multiplicador do Nz
-# Nz -> 25, 2Nz -> 50, 4Nz -> 100, 8Nz -> 200
-X_TO_MULT = {25: 1, 50: 2, 100: 4, 200: 8}
+# Valor-base usado como Nz
+BASE_NZ = 25
 
+# Correções opcionais para nomes de arquivos especiais
+# Exemplo: se o arquivo vem como 301, mas você quer tratá-lo como 300 = 12Nz
+NZ_ALIASES = {
+    301: 300,
+}
+
+
+def mult_from_X(X: int) -> float:
+    """
+    Converte o valor X do nome do arquivo em multiplicador de Nz.
+
+    Ex:
+    X = 25  -> 1Nz
+    X = 50  -> 2Nz
+    X = 100 -> 4Nz
+    X = 200 -> 8Nz
+    X = 300 -> 12Nz
+    X = 400 -> 16Nz
+    """
+    X_eff = NZ_ALIASES.get(X, X)
+    return X_eff / BASE_NZ
+
+
+def label_mult(mult: float) -> str:
+    """
+    Gera o rótulo do eixo x.
+    """
+    if np.isclose(mult, 1):
+        return r"$N_z$"
+
+    if np.isclose(mult, round(mult)):
+        return rf"${int(round(mult))}N_z$"
+
+    return rf"${mult:g}N_z$"
 
 def style_like_example():
     plt.rcParams.update({
@@ -39,10 +72,8 @@ def label_for_method(method: str) -> str:
 
 def plot_one_C(res_df: pd.DataFrame, out_path: Path) -> None:
     style_like_example()
-    fig, ax = plt.subplots(figsize=(6, 8), dpi=200)
 
-    xticks = [1, 2, 4, 8]
-    xticklabels = [r"$N_z$", r"$2N_z$", r"$4N_z$", r"$8N_z$"]
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=200)
 
     styles = {
         "nz": dict(color="red", marker="o", linestyle="None", markersize=4),
@@ -53,16 +84,39 @@ def plot_one_C(res_df: pd.DataFrame, out_path: Path) -> None:
         sub = res_df[res_df["method"] == method].sort_values("mult")
         if sub.empty:
             continue
-        ax.plot(sub["mult"], sub["L2_percent"], label=label_for_method(method), **styles[method])
+
+        ax.plot(
+            sub["mult"],
+            sub["L2_percent"],
+            label=label_for_method(method),
+            **styles[method],
+        )
+
+    # Gera automaticamente os ticks com base nos valores existentes
+    xticks = sorted(res_df["mult"].dropna().unique())
 
     ax.set_xticks(xticks)
-    ax.set_xticklabels(xticklabels)
+    ax.set_xticklabels([label_mult(x) for x in xticks])
+
     ax.set_xlabel("Number of volumes")
     ax.set_ylabel(r"Norma $L_2$ (\%) — Velocity profile")
-    ax.set_xlim(0.8, 8.2)
+
+    # Ajusta automaticamente o limite do eixo x
+    if len(xticks) > 0:
+        xmin = min(xticks)
+        xmax = max(xticks)
+
+        if np.isclose(xmin, xmax):
+            pad = 0.5
+        else:
+            pad = 0.08 * (xmax - xmin)
+
+        ax.set_xlim(xmin - pad, xmax + pad)
 
     ax.grid(True, which="major", linestyle=":", linewidth=0.8, color="0.75")
-    #ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.16), ncol=2, frameon=False)
+
+    # Caso queira legenda, pode descomentar:
+    # ax.legend(loc="best", frameon=False)
 
     fig.tight_layout()
     fig.savefig(out_path)
@@ -229,10 +283,7 @@ def main():
         z_th, u_th, h_th, tpath = get_theory(c_token)
 
         for X, method, path in items:
-            mult = X_TO_MULT.get(X)
-            if mult is None:
-                print(f"[SKIP] X={X} não está em {sorted(X_TO_MULT.keys())}: {path.name}")
-                continue
+            mult = mult_from_X(X)
 
             df = load_xy_from_csv(path, xcol, ycol)
             z_num, u_num = normalize_numeric_to_SI(df, xcol, ycol)

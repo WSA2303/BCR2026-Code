@@ -102,207 +102,207 @@ def load_manual_z0(path: Path) -> dict[str, dict[str, float]]:
     return out
 
 
-def _save_combined_triplets_by_c(
-    panel_cases: dict[str, list[dict]],
-    output_dir: Path,
-    dpi: int = 300,
-) -> list[Path]:
-    """
-    Gera figuras combinadas (2x2) diretamente em subplots, uma por valor de C.
-    Sem letras (a), (b), ...
-    Sem título 'C = ...' no topo.
-    Com legenda única para as 4 subfiguras.
-    """
-    generated_panels: list[Path] = []
+# def _save_combined_triplets_by_c(
+#     panel_cases: dict[str, list[dict]],
+#     output_dir: Path,
+#     dpi: int = 300,
+# ) -> list[Path]:
+#     """
+#     Gera figuras combinadas (2x2) diretamente em subplots, uma por valor de C.
+#     Sem letras (a), (b), ...
+#     Sem título 'C = ...' no topo.
+#     Com legenda única para as 4 subfiguras.
+#     """
+#     generated_panels: list[Path] = []
 
-    legend_handles = [
-        Line2D([0], [0], color="black", linewidth=3.2, label="Analytical"),
-        Line2D(
-            [0], [0],
-            color="red", linewidth=2.0,
-            marker="o", markerfacecolor="none", markersize=6,
-            label=r"$\eta_0=f(N_z)$",
-        ),
-        Line2D(
-            [0], [0],
-            color="blue", linewidth=2.0,
-            marker="*", markersize=8,
-            label=r"$\eta_0=f(K_n)$",
-        ),
-    ]
+#     legend_handles = [
+#         Line2D([0], [0], color="black", linewidth=3.2, label="Analytical"),
+#         Line2D(
+#             [0], [0],
+#             color="red", linewidth=2.0,
+#             marker="o", markerfacecolor="none", markersize=6,
+#             label=r"$\eta_0=f(N_z)$",
+#         ),
+#         Line2D(
+#             [0], [0],
+#             color="blue", linewidth=2.0,
+#             marker="*", markersize=8,
+#             label=r"$\eta_0=f(K_n)$",
+#         ),
+#     ]
 
-    for c_token, cases in sorted(panel_cases.items()):
-        if not cases:
-            continue
+#     for c_token, cases in sorted(panel_cases.items()):
+#         if not cases:
+#             continue
 
-        cases = sorted(cases, key=lambda d: _nz_from_base(d["base"]))
+#         cases = sorted(cases, key=lambda d: _nz_from_base(d["base"]))
 
-        n = len(cases)
-        ncols = 2
-        nrows = int(np.ceil(n / ncols))
+#         n = len(cases)
+#         ncols = 2
+#         nrows = int(np.ceil(n / ncols))
 
-        fig, axes = plt.subplots(
-            nrows=nrows,
-            ncols=ncols,
-            figsize=(16, 7),
-            dpi=dpi,
-        )
-        axes = np.atleast_1d(axes).ravel()
+#         fig, axes = plt.subplots(
+#             nrows=nrows,
+#             ncols=ncols,
+#             figsize=(10, 8),
+#             dpi=dpi,
+#         )
+#         axes = np.atleast_1d(axes).ravel()
 
-        group_umax = max(float(case["umax"]) for case in cases)
-        any_in_meters = any(bool(case["in_meters"]) for case in cases)
-        ytop = 3.345 if any_in_meters else 0.03345
+#         group_umax = max(float(case["umax"]) for case in cases)
+#         any_in_meters = any(bool(case["in_meters"]) for case in cases)
+#         ytop = 3.345 if any_in_meters else 0.03345
 
-        xlabel = cases[0]["xlabel"]
-        ylabel = cases[0]["ylabel"]
-        unit = cases[0]["unit"]
+#         xlabel = cases[0]["xlabel"]
+#         ylabel = cases[0]["ylabel"]
+#         unit = cases[0]["unit"]
 
-        LABEL_FONTSIZE = 18
-        TICK_FONTSIZE = 13
-        LEGEND_FONTSIZE = 18
-        TEXT_FONTSIZE = 12
-        TITLE_FONTSIZE = 20
+#         LABEL_FONTSIZE = 18
+#         TICK_FONTSIZE = 13
+#         LEGEND_FONTSIZE = 18
+#         TEXT_FONTSIZE = 12
+#         TITLE_FONTSIZE = 20
 
-        for i, case in enumerate(cases):
-            ax = axes[i]
+#         for i, case in enumerate(cases):
+#             ax = axes[i]
 
-            base = case["base"]
-            df_ana = case["df_ana"]
-            df_nz = case["df_nz"]
-            df_kn = case["df_kn"]
-            z0_ana = case["z0_ana"]
-            z0_nz = case["z0_nz"]
-            z0_kn = case["z0_kn"]
+#             base = case["base"]
+#             df_ana = case["df_ana"]
+#             df_nz = case["df_nz"]
+#             df_kn = case["df_kn"]
+#             z0_ana = case["z0_ana"]
+#             z0_nz = case["z0_nz"]
+#             z0_kn = case["z0_kn"]
 
-            def markevery(df: pd.DataFrame) -> int:
-                npts = len(df)
-                return max(1, npts // 40)
+#             def markevery(df: pd.DataFrame) -> int:
+#                 npts = len(df)
+#                 return max(1, npts // 40)
 
-            ax.plot(df_ana["U_0"], df_ana["z"], color="black", linewidth=3.2)
+#             ax.plot(df_ana["U_0"], df_ana["z"], color="black", linewidth=3.2)
 
-            if df_nz is not None:
-                ax.plot(
-                    df_nz["U_0"], df_nz["z"],
-                    color="red", linewidth=2.0,
-                    marker="o", markerfacecolor="none", markersize=6,
-                    markevery=markevery(df_nz),
-                )
+#             if df_nz is not None:
+#                 ax.plot(
+#                     df_nz["U_0"], df_nz["z"],
+#                     color="red", linewidth=2.0,
+#                     marker="o", markerfacecolor="none", markersize=6,
+#                     markevery=markevery(df_nz),
+#                 )
 
-            if df_kn is not None:
-                ax.plot(
-                    df_kn["U_0"], df_kn["z"],
-                    color="blue", linewidth=2.0,
-                    marker="*", markersize=8,
-                    markevery=markevery(df_kn),
-                )
+#             if df_kn is not None:
+#                 ax.plot(
+#                     df_kn["U_0"], df_kn["z"],
+#                     color="blue", linewidth=2.0,
+#                     marker="*", markersize=8,
+#                     markevery=markevery(df_kn),
+#                 )
 
-            ax.axhline(z0_ana, color="green", linestyle="--", linewidth=1.8)
-            if z0_kn is not None:
-                ax.axhline(z0_kn, color="blue", linestyle="--", linewidth=1.8)
-            if z0_nz is not None:
-                ax.axhline(z0_nz, color="red", linestyle="--", linewidth=1.8)
+#             ax.axhline(z0_ana, color="green", linestyle="--", linewidth=1.8)
+#             if z0_kn is not None:
+#                 ax.axhline(z0_kn, color="blue", linestyle="--", linewidth=1.8)
+#             if z0_nz is not None:
+#                 ax.axhline(z0_nz, color="red", linestyle="--", linewidth=1.8)
 
-            x_left = 0.05 * group_umax
-            x_mid = 0.33 * group_umax
-            x_right = 0.58 * group_umax
+#             x_left = 0.05 * group_umax
+#             x_mid = 0.33 * group_umax
+#             x_right = 0.58 * group_umax
 
-            text_box = dict(
-                facecolor="white",
-                edgecolor="none",
-                alpha=0.85,
-                pad=0.2,
-            )
+#             text_box = dict(
+#                 facecolor="white",
+#                 edgecolor="none",
+#                 alpha=0.85,
+#                 pad=0.2,
+#             )
 
-            if z0_kn is not None:
-                ax.annotate(
-                    rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
-                    xy=(x_left, z0_kn),
-                    xytext=(0, -8),
-                    textcoords="offset points",
-                    color="blue",
-                    fontsize=TEXT_FONTSIZE,
-                    va="top",
-                    ha="left",
-                    bbox=text_box,
-                )
+#             if z0_kn is not None:
+#                 ax.annotate(
+#                     rf"$z_0(K_n)$ = {z0_kn:.4f}{unit}",
+#                     xy=(x_left, z0_kn),
+#                     xytext=(0, -8),
+#                     textcoords="offset points",
+#                     color="blue",
+#                     fontsize=TEXT_FONTSIZE,
+#                     va="top",
+#                     ha="left",
+#                     bbox=text_box,
+#                 )
 
-            ax.annotate(
-                rf"$z_0(Analytical)$ = {z0_ana:.4f}{unit}",
-                xy=(x_mid, z0_ana),
-                xytext=(0, 8),
-                textcoords="offset points",
-                color="green",
-                fontsize=TEXT_FONTSIZE,
-                va="bottom",
-                ha="left",
-                bbox=text_box,
-            )
+#             ax.annotate(
+#                 rf"$z_0(Analytical)$ = {z0_ana:.4f}{unit}",
+#                 xy=(x_mid, z0_ana),
+#                 xytext=(0, 8),
+#                 textcoords="offset points",
+#                 color="green",
+#                 fontsize=TEXT_FONTSIZE,
+#                 va="bottom",
+#                 ha="left",
+#                 bbox=text_box,
+#             )
 
-            if z0_nz is not None:
-                ax.annotate(
-                    rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
-                    xy=(x_right, z0_nz),
-                    xytext=(0, 8),
-                    textcoords="offset points",
-                    color="red",
-                    fontsize=TEXT_FONTSIZE,
-                    va="bottom",
-                    ha="left",
-                    bbox=text_box,
-                )
+#             if z0_nz is not None:
+#                 ax.annotate(
+#                     rf"$z_0(N_z)$ = {z0_nz:.4f}{unit}",
+#                     xy=(x_right, z0_nz),
+#                     xytext=(0, 8),
+#                     textcoords="offset points",
+#                     color="red",
+#                     fontsize=TEXT_FONTSIZE,
+#                     va="bottom",
+#                     ha="left",
+#                     bbox=text_box,
+#                 )
 
-            ax.set_xlim(0.0, group_umax * 1.05)
-            ax.set_ylim(0.0, ytop)
+#             ax.set_xlim(0.0, group_umax * 1.05)
+#             ax.set_ylim(0.0, ytop)
 
-            style_axes(
-                ax,
-                xfmt="%.2f",
-                yfmt="%.3f",
-                nbins_x=6,
-                nbins_y=7,
-                minor_grid=False,
-            )
-            ax.tick_params(axis="both", labelsize=TICK_FONTSIZE)
+#             style_axes(
+#                 ax,
+#                 xfmt="%.2f",
+#                 yfmt="%.3f",
+#                 nbins_x=6,
+#                 nbins_y=7,
+#                 minor_grid=False,
+#             )
+#             ax.tick_params(axis="both", labelsize=TICK_FONTSIZE)
 
-            nz = _nz_from_base(base)
-            ax.set_title(rf"$N_z = {nz}$", fontsize=TITLE_FONTSIZE, pad=6)
+#             nz = _nz_from_base(base)
+#             ax.set_title(rf"$N_z = {nz}$", fontsize=TITLE_FONTSIZE, pad=6)
 
-            row = i // ncols
-            col = i % ncols
+#             row = i // ncols
+#             col = i % ncols
 
-            if row == nrows - 1:
-                ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
-            else:
-                ax.set_xlabel("")
-                ax.tick_params(axis="x", labelbottom=False)
+#             if row == nrows - 1:
+#                 ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
+#             else:
+#                 ax.set_xlabel("")
+#                 ax.tick_params(axis="x", labelbottom=False)
 
-            if col == 0:
-                ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
-            else:
-                ax.set_ylabel("")
-                ax.tick_params(axis="y", labelleft=False)
+#             if col == 0:
+#                 ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
+#             else:
+#                 ax.set_ylabel("")
+#                 ax.tick_params(axis="y", labelleft=False)
 
-        for j in range(n, len(axes)):
-            axes[j].axis("off")
+#         for j in range(n, len(axes)):
+#             axes[j].axis("off")
 
-        fig.legend(
-            handles=legend_handles,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 0.975),
-            ncol=3,
-            frameon=False,
-            fontsize=LEGEND_FONTSIZE,
-        )
+#         fig.legend(
+#             handles=legend_handles,
+#             loc="upper center",
+#             bbox_to_anchor=(0.5, 0.975),
+#             ncol=3,
+#             frameon=False,
+#             fontsize=LEGEND_FONTSIZE,
+#         )
 
-        fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.90))
+#         fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.90))
 
-        out_path = _next_available_path(output_dir / f"C{c_token}_combined_triple.png")
-        fig.savefig(out_path, bbox_inches="tight")
-        plt.close(fig)
+#         out_path = _next_available_path(output_dir / f"C{c_token}_combined_triple.png")
+#         fig.savefig(out_path, bbox_inches="tight")
+#         plt.close(fig)
 
-        generated_panels.append(out_path)
+#         generated_panels.append(out_path)
 
-    return generated_panels
+#     return generated_panels
 
 
 def plot_triplets_with_computed_theory(
@@ -427,7 +427,7 @@ def plot_triplets_with_computed_theory(
         umax = max(umax_candidates)
 
         out_path = _next_available_path(output_dir / f"{base}_triple.png")
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=dpi)
+        fig, ax = plt.subplots(figsize=(8, 6), dpi=dpi)
 
         LABEL_FONTSIZE = 20
         TICK_FONTSIZE = 14

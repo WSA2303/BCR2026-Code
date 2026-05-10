@@ -111,7 +111,7 @@ def plot_xy(
     apply_plot_style()
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=dpi)
 
     if swap:
         x, y = df[ycol], df[xcol]
